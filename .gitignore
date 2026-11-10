@@ -1,0 +1,13 @@
+# npm 安装的依赖，包括每个章节下的依赖目录
+node_modules/
+
+# macOS 自动生成的目录信息
+.DS_Store
+
+# 本地环境变量
+.env
+.env.*
+!.env.example
+
+# npm 运行时产生的调试日志
+npm-debug.log*

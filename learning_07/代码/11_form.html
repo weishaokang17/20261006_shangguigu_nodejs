@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录页面</title>
+</head>
+<body>
+  <h2>用户登录</h2>
+  <hr />
+
+  <form action="/login" method="post">
+    用户名: <input type="text" name="username"><br />
+    密码: <input type="password" name="password"><br />
+    <button>登录</button>
+  </form>
+</body>
+</html>
+
+<!--
+===============================================================================
+学习笔记：原生表单为什么发送 URL 编码数据？怎样改成发送 JSON？
+===============================================================================
+
+本注释整理自本页面与“11_获取请求体数据.js”的学习问答。
+这里只追加说明和示例，没有改变上面的实际表单，也没有修改服务端代码。
+注释中的 HTML、JavaScript 和服务端示例均不会被当前页面执行。
+
+当前页面仍然采用原生表单提交：
+  请求方式：POST
+  请求地址：/login
+  默认请求体类型：application/x-www-form-urlencoded
+
+要实际改成 JSON 提交，需要同时考虑：
+  1. 前端如何构造和发送 JSON 请求体。
+  2. 服务端如何识别并解析 JSON 请求体。
+
+一、先分清两个请求：获取页面与提交表单
+===============================================================================
+
+服务端目前有：
+
+  app.get('/login', (req, res) => {
+    res.sendFile(__dirname + '/11_form.html');
+  });
+
+这段代码处理的是浏览器获取页面的 GET 请求：
+
+  浏览器访问 /login
+    ↓
+  Express 匹配 GET /login
+    ↓
+  res.sendFile 返回本 HTML 文件
+    ↓
+  浏览器解析 HTML，显示用户名和密码输入框
+
+用户填写表单并提交时，浏览器会再发起另一个请求：
+
+  用户提交表单
+    ↓
+  浏览器发送 POST /login
+    ↓
+  服务端匹配 POST /login
+    ↓
+  请求体解析中间件处理数据
+    ↓
+  路由回调通过 req.body 使用解析后的结果
+
+因此：
+  GET /login 与 POST /login 是两个不同的 HTTP 请求。
+  它们虽然使用同一路径，但请求方法和处理职责不同。
+
+__dirname + '/11_form.html' 是服务器上的文件路径。
+它决定服务端从哪里读取 HTML，不决定后续 POST 请求体的格式。
+
+后续 POST 请求体采用什么格式，由页面实际使用的提交方式决定。
+同一个页面既可以用原生表单提交，也可以用 JavaScript 发送 JSON。
+
+二、当前 HTML 为什么发送 URL 编码表单数据？
+===============================================================================
+
+页面中的实际表单是：
+
+  <form action="/login" method="post">
+    用户名: <input type="text" name="username"><br>
+    密码: <input type="password" name="password"><br>
+    <button>登录</button>
+  </form>
+
+action="/login"：
+  指定原生表单提交的目标路径。
+
+method="post"：
+  指定使用 POST 方法提交。
+
+name="username" 和 name="password"：
+  指定原生表单提交时使用的字段名称。
+
+没有显式设置 enctype：
+  默认使用 application/x-www-form-urlencoded 编码。
+
+例如填写：
+  username：zhangsan
+  password：123456
+
+请求的关键部分通常类似：
+
+  POST /login HTTP/1.1
+  Content-Type: application/x-www-form-urlencoded
+
+  username=zhangsan&password=123456
+
+字段和值会按 URL 编码表单规则编码。
+这里选择简单英文和数字，所以容易直接看出 key=value&key=value 的结构。
+中文、空格和特殊字符会涉及相应编码，不能理解成单纯原样拼接字符串。
+
+三、“query string 格式”和“数据位于 URL”不是同一件事
+===============================================================================
+
+URL 编码表单采用类似查询字符串的结构：
+
+  username=zhangsan&password=123456
+
+但数据放在哪里，还要看请求如何构造。
+
+例 1：数据放在 URL 查询字符串中。
+
+  GET /login?username=zhangsan
+
+在 Express 中，查询字符串通常通过 req.query 获取。
+
+例 2：数据放在 POST 请求体中。
+
+  POST /login
+  Content-Type: application/x-www-form-urlencoded
+
+  username=zhangsan&password=123456
+
+经过对应解析中间件后，通过 req.body 获取。
+
+本页面属于第二种。
+课程里说“querystring 格式请求体”可以帮助理解编码结构，
+更准确的类型名称是 application/x-www-form-urlencoded。
+
+不要把：
+  编码格式像查询字符串
+误解为：
+  数据一定在地址栏或 req.query 中。
+
+POST 本身也不等于 JSON。
+POST 请求体可以使用 URL 编码表单、JSON、multipart 等多种格式。
+
+四、原生 form 不能仅靠 enctype="application/json" 变成 JSON 提交
+===============================================================================
+
+浏览器原生表单提交支持的编码类型主要是：
+
+  application/x-www-form-urlencoded
+    默认的普通表单编码。
+
+  multipart/form-data
+    常用于文件上传，也可以携带普通文本字段。
+
+  text/plain
+    使用简单文本形式，不适合可靠地表达一般结构化表单数据。
+
+application/json 不是原生 form 的有效提交编码选项。
+
+因此，下面这样写不能让浏览器自动生成 JSON 请求体：
+
+  <form action="/login" method="post" enctype="application/json">
+
+也不能只把 method 改成 post 就认为数据会变成 JSON。
+method 决定请求方法，不能代替请求体编码方式。
+
+对于当前需求，可以用 JavaScript 拦截表单提交，
+读取输入值，再通过 fetch 发送 JSON 字符串。
+
+五、发送 JSON 时，前端必须同时做好两件事
+===============================================================================
+
+假设先构造一个 JavaScript 对象：
+
+  const data = {
+    username: 'zhangsan',
+    password: '123456'
+  };
+
+注意：这是内存里的 JavaScript 对象，不是已经发送出去的 JSON 文本。
+
+第一件事：将对象序列化成 JSON 字符串。
+
+  const bodyText = JSON.stringify(data);
+
+得到：
+
+  {"username":"zhangsan","password":"123456"}
+
+第二件事：声明请求体的媒体类型。
+
+  'Content-Type': 'application/json'
+
+组合起来：
+
+  fetch('/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+
+JSON.stringify 决定请求体中实际放入什么文本。
+Content-Type 告诉服务端这段请求体应该按什么格式解释。
+
+二者不能互相替代。
+
+只写 Content-Type，不会自动把普通对象转换成 JSON。
+只写 JSON.stringify，但没有正确声明类型，
+也不能假设默认 JSON 解析中间件一定会主动猜测并解析内容。
+
+不应这样写：
+
+  body: data
+
+fetch 不会自动把这个普通对象按照 JSON 格式序列化。
+
+六、与当前页面对应的一份完整 JSON 提交示例
+===============================================================================
+
+下面是“如果将来实际修改页面，可以采用的示例”。
+当前它位于 HTML 注释中，不会执行，不会改变上面的实际表单行为。
+
+  <!DOCTYPE html>
+  <html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录页面</title>
+  </head>
+  <body>
+    <h2>用户登录</h2>
+    <hr>
+
+    <form id="loginForm" action="/login" method="post">
+      用户名：
+      <input type="text" name="username">
+      <br>
+
+      密码：
+      <input type="password" name="password">
+      <br>
+
+      <button type="submit">登录</button>
+    </form>
+
+    <p id="result"></p>
+
+    <script>
+      const form = document.getElementById('loginForm');
+      const result = document.getElementById('result');
+
+      form.addEventListener('submit', async (event) => {
+        // 取消浏览器原生的表单提交行为
+        event.preventDefault();
+
+        // 按输入控件的 name 取值
+        const data = {
+          username: form.elements.namedItem('username').value,
+          password: form.elements.namedItem('password').value
+        };
+
+        try {
+          const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+          });
+
+          // fetch 遇到 HTTP 400、500 等响应，不会仅因状态码就自动抛错
+          if (!response.ok) {
+            throw new Error('请求失败，状态码：' + response.status);
+          }
+
+          // 当前服务端返回普通文本，使用 text() 读取
+          const message = await response.text();
+          result.textContent = message;
+        } catch (error) {
+          result.textContent = '提交失败：' + error.message;
+        }
+      });
+    </script>
+  </body>
+  </html>
+
+运行时，应先启动 Express 服务，再通过：
+  http://127.0.0.1:3000/login
+
+打开页面，不要直接双击 HTML，以本地 file 地址测试这个相对接口路径。
+
+fetch('/login') 使用当前页面所在站点的 /login。
+在上述打开方式下，它会请求同一个 Express 服务。
+
+七、逐步理解提交事件里的代码
+===============================================================================
+
+1. 为什么监听 form 的 submit，而不是只监听按钮 click？
+
+   submit 表示表单发生提交。
+   点击提交按钮、在适当的输入场景中按回车，都可以触发表单提交。
+   监听 submit 可以统一处理这些提交入口。
+
+2. event.preventDefault() 做了什么？
+
+   取消这次事件对应的浏览器默认表单提交行为。
+   否则浏览器仍可能按原生规则提交并导航页面，
+   与手动 fetch 的行为冲突。
+
+   它不会自动发送 JSON；发送请求的是后面的 fetch。
+
+3. form.elements.namedItem('username').value 是什么？
+
+   form.elements 是表单控件集合。
+   namedItem('username') 在这里找到 name 为 username 的输入框。
+   .value 读取输入框的当前值。
+
+4. data 对象的字段名由谁决定？
+
+   在这个手动构造的对象里，username、password 是代码明确写出的键。
+   fetch 不会自动把整个表单转换成 JSON，也不会自动选择字段名称。
+
+   本示例让 JSON 字段名与输入框 name 一致，便于前后端对接。
+   如果改成其他 JSON 字段名，服务端也要按相应名称读取。
+
+5. 输入值是什么类型？
+
+   这些输入框的 .value 是字符串。
+   即使密码输入的是 123456，序列化后的值也是 "123456"。
+   JSON 支持数字、布尔值等，但不会替你自动推断或转换输入框值。
+
+6. action 和 method 还决定 fetch 怎么发吗？
+
+   示例中的 fetch('/login', { method: 'POST', ... }) 已明确写出地址和方法。
+   在取消原生提交后，本次请求由 fetch 的参数决定，
+   不是 fetch 自动读取了 form 的 action、method。
+
+   保留原来的 form 属性便于理解。
+   如果 JavaScript 没有执行，原生提交仍会遵循这些表单属性，
+   此时发送的仍是 URL 编码表单，而不是 JSON。
+
+7. fetch 成功后，会像原生提交那样自动切换整个页面吗？
+
+   不会。
+   fetch 把响应交给 JavaScript，本示例把文本写入 result 元素。
+   如果需要跳转或更新其他内容，需要由代码明确实现。
+
+八、服务端必须使用适合 JSON 的解析中间件
+===============================================================================
+
+“11_获取请求体数据.js”当前代码中：
+
+  // const jsonParser = bodyParser.json()
+
+这行被注释了，JSON 解析器没有启用。
+
+实际使用的是：
+
+  const urlencodedParser = bodyParser.urlencoded({
+    extended: false
+  });
+
+  app.post('/login', urlencodedParser, (req, res) => {
+    console.log(req.body);
+    res.send('获取用户的数据');
+  });
+
+urlencodedParser 用于解析 URL 编码表单请求体，
+不能把它当作 application/json 的解析器。
+
+如果前端实际改成 JSON 提交，服务端可对应改成：
+
+  const jsonParser = bodyParser.json();
+
+  app.post('/login', jsonParser, (req, res) => {
+    const { username, password } = req.body;
+
+    // 在这里使用 username、password 处理业务逻辑
+    res.send('获取用户的数据');
+  });
+
+这里：
+  bodyParser.json() 创建解析中间件。
+  app.post 中的 jsonParser 先处理匹配类型的请求体。
+  解析成功后，它继续执行后面的路由回调。
+  回调通过 req.body 读取解析结果。
+
+不是只创建 jsonParser 变量，就自动解析所有请求。
+必须把解析器注册到请求会经过的位置，而且在读取 req.body 之前执行。
+
+本例把它作为路由级中间件使用，与前面学习的 next 机制是连贯的。
+
+九、从前端对象到服务端对象，中间经历了什么？
+===============================================================================
+
+前端内存中的 JavaScript 对象：
+
+  {
+    username: 'zhangsan',
+    password: '123456'
+  }
+
+经过 JSON.stringify：
+
+  {"username":"zhangsan","password":"123456"}
+
+这段 JSON 文本被放入 POST 请求体，并附带：
+
+  Content-Type: application/json
+
+服务端 JSON 解析器读取并解析后，req.body 成为 JavaScript 对象：
+
+  {
+    username: 'zhangsan',
+    password: '123456'
+  }
+
+所以可以：
+
+  req.body.username
+  req.body.password
+
+完整关系：
+
+  浏览器 JavaScript 对象
+    ↓ JSON.stringify
+  请求体中的 JSON 文本
+    ↓ bodyParser.json 解析
+  服务端 req.body 中的 JavaScript 对象
+
+JSON 是一种数据格式。
+JavaScript 对象是程序运行时的数据。
+不能把“请求体中的 JSON 文本”和“解析后的 req.body 对象”混为一谈。
+
+同样，URL 编码表单经过 urlencodedParser 后，也可能得到形状相同的对象。
+因此，仅看到控制台里打印出了一个对象，
+不能反推网络中传输的请求体一定是 JSON。
+
+十、如果希望同一个接口兼容两种提交方式
+===============================================================================
+
+可以同时注册 JSON 和 URL 编码解析中间件：
+
+  const jsonParser = bodyParser.json();
+
+  const urlencodedParser = bodyParser.urlencoded({
+    extended: false
+  });
+
+  app.post(
+    '/login',
+    jsonParser,
+    urlencodedParser,
+    (req, res) => {
+      const { username, password } = req.body;
+      res.send('获取用户的数据');
+    }
+  );
+
+在默认类型配置下：
+  Content-Type 为 application/json，使用 JSON 解析器。
+  Content-Type 为 application/x-www-form-urlencoded，使用 URL 编码解析器。
+
+它们会根据类型及请求体处理状态决定是否解析，
+不是把同一份请求体强行按两种格式各解析一次。
+
+这也可以兼容：
+  JavaScript fetch 的 JSON 提交。
+  原生 form 的 URL 编码提交。
+
+extended: false 是 URL 编码解析器的配置，
+不是“关闭 JSON”的开关。
+把 extended 改成 true，也不会让它自动变成 JSON 解析器。
+
+十一、FormData、URLSearchParams 与 JSON.stringify 的区别
+===============================================================================
+
+下面几种写法不是一回事：
+
+1. JSON：
+
+   fetch('/login', {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json'
+     },
+     body: JSON.stringify({
+       username: 'zhangsan',
+       password: '123456'
+     })
+   });
+
+   请求体是 JSON 文本，应使用 JSON 解析器。
+
+2. FormData：
+
+   fetch('/login', {
+     method: 'POST',
+     body: new FormData(form)
+   });
+
+   通常发送 multipart/form-data，浏览器会设置包含 boundary 的类型头。
+   这种写法不是 JSON，不能直接交给 bodyParser.json 解析。
+   bodyParser.urlencoded 也不负责解析 multipart 表单。
+   文件上传等场景需要相应的 multipart 处理方式。
+
+3. URLSearchParams：
+
+   fetch('/login', {
+     method: 'POST',
+     body: new URLSearchParams({
+       username: 'zhangsan',
+       password: '123456'
+     })
+   });
+
+   使用 URL 编码格式，fetch 会为这种请求体设置相应的默认类型。
+   在类型没有被手动错误覆盖时，可由 URL 编码解析器处理。
+
+因此，“使用了 fetch”不等于“发送的是 JSON”。
+最终要看 body 的构造方式，以及实际 Content-Type。
+
+十二、请求是 JSON，不代表响应也必须是 JSON
+===============================================================================
+
+当前服务端返回：
+
+  res.send('获取用户的数据');
+
+这里是普通文本内容，不是 JSON 文本。
+对应前端使用：
+
+  const message = await response.text();
+
+不要因为请求体是 JSON，就无条件使用 response.json()。
+把普通中文文本当 JSON 解析，会产生解析错误。
+
+如果服务端改成：
+
+  res.json({
+    message: '获取用户的数据'
+  });
+
+前端才相应地使用：
+
+  const data = await response.json();
+  result.textContent = data.message;
+
+请求与响应是两个方向：
+  请求 Content-Type 描述浏览器发送的请求体。
+  响应 Content-Type 描述服务器返回的响应体。
+
+两边的格式可以不同。
+浏览器发送 JSON，服务端返回文本，是完全正常的组合。
+
+十三、如何观察实际发送的格式？
+===============================================================================
+
+将来实际修改并运行后，可以打开浏览器开发者工具的 Network 面板，
+提交一次表单，选择这次 POST /login 请求进行观察。
+
+当前原生表单提交，通常可以看到：
+
+  Request Method:
+    POST
+
+  Content-Type:
+    application/x-www-form-urlencoded
+
+  请求体的编码形式：
+    username=zhangsan&password=123456
+
+改成 JSON fetch 提交后，应该看到：
+
+  Request Method:
+    POST
+
+  Content-Type:
+    application/json
+
+  请求体：
+    {"username":"zhangsan","password":"123456"}
+
+不同浏览器对 Payload 的展示名称和格式化方式可能不同。
+判断依据应是实际请求头和请求体，而不只是面板中的栏目名称。
+
+服务端 req.body 是解析结果，不是原始请求体的直接展示。
+前端发送格式正确但服务端没有正确注册解析器时，
+不能期待读取 req.body 就自动得到目标数据。
+
+十四、容易混淆的说法对照
+===============================================================================
+
+错误：“sendFile 指定了这个 HTML，所以 POST 数据格式由文件路径决定。”
+正确：sendFile 返回页面；后续请求体格式由页面的提交方式决定。
+
+错误：“POST 请求就是 JSON 请求。”
+正确：POST 是请求方法，JSON 是一种请求体格式，二者不是同一个概念。
+
+错误：“key=value&key=value 的数据一定在 URL 里。”
+正确：这种编码既可以出现在查询字符串，也可以用于 POST 请求体。
+
+错误：“给 form 写 enctype=application/json 就能原生提交 JSON。”
+正确：原生 form 不支持通过这个值自动生成 JSON，应使用脚本构造请求。
+
+错误：“给 fetch 的 body 直接放普通对象，就会自动转成 JSON。”
+正确：普通对象需要显式 JSON.stringify，不能依赖自动 JSON 序列化。
+
+错误：“设置 Content-Type 就会转换请求体。”
+正确：请求头描述格式，不会替你把实际数据转换成对应格式。
+
+错误：“前端发送 JSON 后，服务端原来的 urlencodedParser 也能解析。”
+正确：JSON 请求体需要匹配的 JSON 解析器。
+
+错误：“bodyParser.json() 创建完变量，就会自动处理所有请求。”
+正确：需要注册中间件，并让它在读取 req.body 的处理函数之前执行。
+
+错误：“使用 FormData 就是在发送 JSON。”
+正确：FormData 通常对应 multipart/form-data。
+
+错误：“req.body 打印出来是对象，所以原始请求体一定是 JSON。”
+正确：不同解析器可以把不同格式的请求体解析成相似的对象。
+
+错误：“请求用了 JSON，响应就必须使用 response.json()。”
+正确：根据响应的实际格式选择 text() 或 json()。
+
+实际改造本页面时，需要配套完成：
+  前端：拦截 submit → 读取字段 → JSON.stringify → 设置类型 → fetch。
+  后端：注册 JSON 解析器 → 解析后使用 req.body。
+  响应：按照服务端返回的实际格式读取和展示。
+
+本次仅把这些知识保存为注释。
+当前实际页面和服务端仍然保持原来的 URL 编码表单提交方式。
+===============================================================================
+-->
